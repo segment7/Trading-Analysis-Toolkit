@@ -87,6 +87,7 @@ OrderBookEntry CSVReader::stringsToOBE(std::string priceString,
 {
     double price, amount;
     try {
+        // stod: string to double
          price = std::stod(priceString);
          amount = std::stod(amountString);
     }catch(const std::exception& e){

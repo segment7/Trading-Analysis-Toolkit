@@ -24,6 +24,7 @@ std::vector<std::string> OrderBook::getKnownProducts()
     }
     
     // now flatten the map to a vector of strings
+    // note: here, auto = std::pair<const std::string,bool> namely pair is an element in mapping
     for (auto const& e : prodMap)
     {
         products.push_back(e.first);
@@ -102,14 +103,14 @@ void OrderBook::insertOrder(OrderBookEntry& order)
 
 std::vector<OrderBookEntry> OrderBook::matchAsksToBids(std::string product, std::string timestamp)
 {
-// asks = orderbook.asks
+    // asks = orderbook.asks
     std::vector<OrderBookEntry> asks = getOrders(OrderBookType::ask, 
                                                  product, 
                                                  timestamp);
-// bids = orderbook.bids
+    // bids = orderbook.bids
     std::vector<OrderBookEntry> bids = getOrders(OrderBookType::bid, 
                                                  product, 
-                                                    timestamp);
+                                                 timestamp);
 
     // sales = []
     std::vector<OrderBookEntry> sales; 

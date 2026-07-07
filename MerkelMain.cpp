@@ -27,6 +27,8 @@ void MerkelMain::init()
 
 void MerkelMain::printMenu()
 {
+    std::cout << "============================ " << std::endl;
+    
     // 1 print help
     std::cout << "1: Print help " << std::endl;
     // 2 print exchange stats
@@ -40,7 +42,7 @@ void MerkelMain::printMenu()
     // 6 continue   
     std::cout << "6: Continue " << std::endl;
 
-    std::cout << "============== " << std::endl;
+    std::cout << "============================ " << std::endl;
 
     std::cout << "Current time is: " << currentTime << std::endl;
 }
@@ -84,7 +86,7 @@ void MerkelMain::printMarketStats()
 
 void MerkelMain::enterAsk()
 {
-    std::cout << "Make an ask - enter the amount: product,price, amount, eg  ETH/BTC,200,0.5" << std::endl;
+    std::cout << "Make an ask - enter the amount: product,price,amount, eg  ETH/BTC,200,0.5" << std::endl;
     std::string input;
     std::getline(std::cin, input);
 
@@ -120,7 +122,7 @@ void MerkelMain::enterAsk()
 
 void MerkelMain::enterBid()
 {
-    std::cout << "Make an bid - enter the amount: product,price, amount, eg  ETH/BTC,200,0.5" << std::endl;
+    std::cout << "Make an bid - enter the amount: product,price,amount, eg  ETH/BTC,200,0.5" << std::endl;
     std::string input;
     std::getline(std::cin, input);
 
@@ -193,7 +195,7 @@ int MerkelMain::getUserOption()
         userOption = std::stoi(line);
     }catch(const std::exception& e)
     {
-        // 
+        
     }
     std::cout << "You chose: " << userOption << std::endl;
     return userOption;

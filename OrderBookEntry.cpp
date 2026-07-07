@@ -6,6 +6,7 @@ OrderBookEntry::OrderBookEntry( double _price,
                         std::string _product, 
                         OrderBookType _orderType, 
                         std::string _username)
+// Constructor initialisation
 : price(_price), 
   amount(_amount), 
   timestamp(_timestamp),
