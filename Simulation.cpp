@@ -29,18 +29,10 @@ bool Simulation::yearHasData(int year)
                                        yearStart, yearEnd).empty();
 }
 
-bool Simulation::isReady()
-{
-    for (int year = OrderBook::DATASET_YEAR + 1; year < currentYear; year++)
-    {
-        if (!yearHasData(year)) return false;
-    }
-    return true;
-}
-
 int Simulation::init()
 {
-    // backfill each year from the dataset year up to (not including) the current year
+    // backfill each year from the dataset year through the current year
+    // (the current year's timestamps are capped at "now" by the generator)
     std::vector<std::string> products = orderBook.getKnownProducts();
     if (products.empty()) return 0;
 
@@ -58,7 +50,7 @@ int Simulation::init()
     }
 
     int yearsFilled = 0;
-    for (int year = OrderBook::DATASET_YEAR + 1; year < currentYear; year++)
+    for (int year = OrderBook::DATASET_YEAR + 1; year <= currentYear; year++)
     {
         if (yearHasData(year))
         {
@@ -68,14 +60,16 @@ int Simulation::init()
 
         std::cout << "Year " << year << ": generating market data..." << std::endl;
 
-        // throwaway, generously-funded wallet — never persisted
+        // throwaway, generously-funded system wallet — its trades are market data,
+        // (persist=false)
         Wallet systemWallet;
         for (const std::string& currency : currencies)
         {
             systemWallet.insertCurrency(currency, 1000000000.0);
         }
         std::pair<int, int> result = transactionManager.generateTransactions(
-            "simuser", orderBook, systemWallet, year, INIT_ORDERS_PER_SIDE);
+            "system", orderBook, systemWallet, year, INIT_ORDERS_PER_SIDE,
+            false /* liveTimestamps */, false /* persist */);
 
         std::cout << "Year " << year << ": done (" << result.first << " filled, "
                   << result.second << " skipped)." << std::endl;
@@ -102,7 +96,9 @@ std::pair<int, int> Simulation::start()
     for (int batch = 0; batch < 10 && totalFilled < 50; batch++)
     {
         std::pair<int, int> result = transactionManager.generateTransactions(
-            username, orderBook, wallet, currentYear, ordersPerSide);
+            username, orderBook, wallet, currentYear, ordersPerSide,
+            true /* live : user? : system */,
+            true /* persist : user? : system */);
         totalFilled += result.first;
         totalSkipped += result.second;
     }

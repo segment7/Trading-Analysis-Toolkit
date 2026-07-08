@@ -7,8 +7,11 @@
 class UserManager
 {
     public:
+        /** reserved testuser account (blank login skips credentials) */
+        static const std::string TEST_USERNAME;
+
         UserManager();
-        /** single entry point: blank username -> guest "simuser";
+        /** single entry point: blank username -> testuser TEST_USERNAME;
          *  failed login offers registration; returns username, "" on failure */
         std::string loginOrRegister();
         void resetPassword();
@@ -23,5 +26,4 @@ class UserManager
         static std::string hashPassword(const std::string& password);
 
         const std::string registerFile = "USERS_REGISTER.CSV";
-        const std::string walletFile   = "USERS_WALLET.CSV";
 };

@@ -6,6 +6,8 @@
 #include <functional>
 #include <random>
 
+const std::string UserManager::TEST_USERNAME = "0000000000";
+
 UserManager::UserManager()
 {
 }
@@ -93,23 +95,21 @@ std::string UserManager::registerUser()
     file << username << "," << fullname << "," << email << ","
          << hashPassword(password) << std::endl;
 
-    // Task 2.6: signup bonus — creates USERS_WALLET.CSV if first user
-    std::ofstream wfile{walletFile, std::ios::app};
-    wfile << username << ",USDT,1000" << std::endl;
-
+    // Task 2.1.6: signup bonus is granted on first login,
+    // in one shared code path for registered users and the testuser alike
     std::cout << "Registered! Your username is: " << username << std::endl;
-    std::cout << "(Remember it for next login. Signup bonus: 1000 USDT)" << std::endl;
+    std::cout << "(Remember it for next login. Signup bonus on first login: 200 BTC, 200 ETH, 200 USDT)" << std::endl;
     return username;
 }
 
 std::string UserManager::loginOrRegister()
 {
-    std::string username = Input::readLine("Username (leave blank for guest): ");
+    std::string username = Input::readLine("Username (leave blank for testuser): ");
     if (username.empty())
     {
-        // classic template behaviour: anonymous demo user, no credentials
-        std::cout << "\nContinuing as guest. No user data will be tracked and kept." << std::endl;
-        return "simuser";
+        std::cout << "\nContinuing as testuser " << TEST_USERNAME
+                  << " (login bypassed for quick testing)." << std::endl;
+        return TEST_USERNAME;
     }
 
     // unknown usernames skip straight to the registration prompt

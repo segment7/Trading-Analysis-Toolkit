@@ -1,5 +1,7 @@
 #include "Wallet.h"
 #include <iostream>
+#include <fstream>
+#include <vector>
 #include "CSVReader.h"
 
 Wallet::Wallet()
@@ -73,32 +75,38 @@ std::string Wallet::toString()
 bool Wallet::canFulfillOrder(OrderBookEntry order)
 {
     std::vector<std::string> currs = CSVReader::tokenise(order.product, '/');
-    // ask
-    if (order.orderType == OrderBookType::ask)
+    // defence in depth: a product that isn't BASE/QUOTE would make currs[1]
+    // an out-of-bounds read below — treat it as unaffordable instead
+    if (currs.size() != 2) return false;
+    bool ok = false;
+    double amount = order.amount;        
+    std::string currency = currs[0];
+    bool isAsk = order.orderType == OrderBookType::ask || order.orderType == OrderBookType::asksale;
+    // ask/asksale: selling the base currency
+    if (isAsk)
     {
-        double amount = order.amount;
-        std::string currency = currs[0];
-        std::cout << "Wallet::canFulfillOrder " << currency << " : " << amount << std::endl;
-
-        return containsCurrency(currency, amount);
+        ok = containsCurrency(currs[0], order.amount);
     }
-    // bid
-    if (order.orderType == OrderBookType::bid)
+    // bid/bidsale: paying with the quote currency
+    else
     {
-        double amount = order.amount * order.price;
-        std::string currency = currs[1];
-        std::cout << "Wallet::canFulfillOrder " << currency << " : " << amount << std::endl;
-        return containsCurrency(currency, amount);
+        ok = containsCurrency(currs[1], order.amount * order.price);
     }
 
-
-    return false; 
+    std::string typeLabel = isAsk ? "ask" : "bid";
+    std::cout << "canFulfillOrder [" << typeLabel << "] "
+              << currency 
+              << " : " 
+              << amount
+              << (ok ? "    filled" : "    skipped") << std::endl;
+    return ok;
 }
       
 
 void Wallet::processSale(OrderBookEntry& sale)
 {
     std::vector<std::string> currs = CSVReader::tokenise(sale.product, '/');
+    if (currs.size() != 2) return;   // malformed product: leave balances untouched
     // ask
     if (sale.orderType == OrderBookType::asksale)
     {
@@ -123,9 +131,49 @@ void Wallet::processSale(OrderBookEntry& sale)
         currencies[outgoingCurrency] -= outgoingAmount;
     }
 }
+void Wallet::loadFromFile(const std::string& username)
+{
+    currencies.clear();
+    std::ifstream file{walletFile};
+    std::string line;
+    while (std::getline(file, line))
+    {
+        std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
+        if (tokens.size() != 3 || tokens[0] != username) continue;
+        try
+        {
+            currencies[tokens[1]] = std::stod(tokens[2]);
+        }
+        catch (const std::exception& e) { }   // skip malformed rows
+    }
+}
+
+void Wallet::saveToFile(const std::string& username) const
+{
+    // the file holds every user's balances — keep everyone else's rows untouched,
+    // then replace this user's rows with the current in-memory map
+    std::vector<std::string> otherLines;
+    std::ifstream in{walletFile};
+    std::string line;
+    while (std::getline(in, line))
+    {
+        std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
+        if (tokens.size() == 3 && tokens[0] != username)
+        {
+            otherLines.push_back(line);
+        }
+    }
+
+    std::ofstream out{walletFile, std::ios::trunc};
+    for (const std::string& l : otherLines) out << l << std::endl;
+    for (std::pair<const std::string, double> const& c : currencies)
+    {
+        out << username << "," << c.first << "," << c.second << std::endl;
+    }
+}
+
 std::ostream& operator<<(std::ostream& os,  Wallet& wallet)
 {
     os << wallet.toString();
     return os;
 }
-

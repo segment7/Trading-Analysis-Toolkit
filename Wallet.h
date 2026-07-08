@@ -23,18 +23,22 @@ class Wallet
         */
         void processSale(OrderBookEntry& sale);
 
+        /** Task 3: load this user's balances from USERS_WALLET.CSV (missing file/user -> empty wallet) */
+        void loadFromFile(const std::string& username);
+        /** Task 3: persist current balances back to USERS_WALLET.CSV, preserving other users' rows */
+        void saveToFile(const std::string& username) const;
 
         /** generate a string representation of the wallet */
         std::string toString();
         friend std::ostream& operator<<(std::ostream& os, Wallet& wallet);
 
-        
+
     private:
         std::map<std::string,double> currencies;
+        const std::string walletFile = "USERS_WALLET.CSV";
 
 };
 
 
 
 	
-

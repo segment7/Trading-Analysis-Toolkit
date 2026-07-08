@@ -6,27 +6,23 @@
 #include "TransactionManager.h"
 
 /** Task 4: fills market-history gaps (init) and runs the user's simulated trades (start).
- *  Construction is inert; init() must run before start(). Idempotent per year. */
+ *  Construction is inert; both operations are independent and init() is idempotent per year. */
 class Simulation
 {
     public:
         Simulation(std::string username, OrderBook& orderBook, Wallet& wallet,
                   TransactionManager& transactionManager, int currentYear);
 
-        /** explicit gap-fill, one year at a time with progress printed per year;
+        /** explicit gap-fill from the dataset year through the current year,
+         *  one year at a time with progress printed per year;
          *  returns how many years were newly filled */
         int init();
 
-        /** true once every year between the dataset and today already has market
-         *  data (i.e. init() has completed, this session or a previous one) */
-        bool isReady();
-
-        /** run 50 transactions for the real user at the current system year —
-         *  caller should check isReady() first */
+        /** run at least 50 transactions stamped with the real current time */
         std::pair<int, int> start();
 
     private:
-        /** shared by init() and isReady(): does this year already have data? */
+        /** does this year already have data? (keeps init() idempotent) */
         bool yearHasData(int year);
 
         std::string username;

@@ -32,44 +32,78 @@ std::vector<std::string> OrderBook::getKnownProducts()
 
     return products;
 }
-/** return vector of Orders according to the sent filters*/
-std::vector<OrderBookEntry> OrderBook::getOrders(OrderBookType type, 
-                                        std::string product, 
-                                        std::string timestamp)
+/** Filter logic core function - one loop, callers supply the condition as a lambda */
+std::vector<OrderBookEntry> OrderBook::filterOrders(const std::function<bool(const OrderBookEntry&)>& pred)
 {
     std::vector<OrderBookEntry> orders_sub;
-    for (OrderBookEntry& e : orders)
-    {
-        if (e.orderType == type && 
-            e.product == product && 
-            e.timestamp == timestamp )
-            {
-                orders_sub.push_back(e);
-            }
-    }
+    std::copy_if(orders.begin(), orders.end(), std::back_inserter(orders_sub), pred);
     return orders_sub;
 }
 
-
-double OrderBook::getHighPrice(std::vector<OrderBookEntry>& orders)
+/** return vector of Orders according to the sent filters*/
+std::vector<OrderBookEntry> OrderBook::getOrders(OrderBookType type,
+                                        std::string product,
+                                        std::string timestamp)
 {
-    double max = orders[0].price;
-    for (OrderBookEntry& e : orders)
+    return filterOrders([&](const OrderBookEntry& e)
     {
-        if (e.price > max)max = e.price;
+        return e.orderType == type &&
+               e.product == product &&
+               e.timestamp == timestamp;
+    });
+}
+
+std::vector<OrderBookEntry> OrderBook::getOrdersInRange(OrderBookType type,
+                                                        const std::string& product,
+                                                        const std::string& startDate,
+                                                        const std::string& endDate)
+{
+    return filterOrders([&](const OrderBookEntry& e)
+    {
+        if (e.orderType != type || e.product != product) return false;
+        // compare date prefix only, so endDate stays inclusive; empty bounds need no special case
+        std::string datePart = e.timestamp.substr(0, 10);
+        return datePart >= startDate && (endDate.empty() || datePart <= endDate);
+    });
+}
+
+std::vector<Candlestick> OrderBook::computeOHLC(OrderBookType type,
+                                                const std::string& product,
+                                                const std::string& startDate,
+                                                const std::string& endDate,
+                                                int groupByChars)
+{
+    std::vector<Candlestick> candles;
+    // chronological order, so first/last seen = open/close; one pass, no per-group rescans
+    std::vector<OrderBookEntry> filtered = getOrdersInRange(type, product, startDate, endDate);
+    for (OrderBookEntry& e : filtered)
+    {
+        std::string key = e.timestamp.substr(0, groupByChars);
+        if (candles.empty() || candles.back().date != key)
+        {
+            // first entry of a new period: open = high = low = close = this price
+            candles.push_back(Candlestick{key, e.price, e.price, e.price, e.price});
+        }
+        else
+        {
+            Candlestick& c = candles.back();
+            if (e.price > c.high) c.high = e.price;
+            if (e.price < c.low)  c.low  = e.price;
+            c.close = e.price;   // last one wins = close
+        }
     }
-    return max;
+    return candles;
 }
 
 
-double OrderBook::getLowPrice(std::vector<OrderBookEntry>& orders)
+double OrderBook::getSeedPrice(OrderBookType type, const std::string& product)
 {
-    double min = orders[0].price;
-    for (OrderBookEntry& e : orders)
+    std::vector<OrderBookEntry> matches = filterOrders([&](const OrderBookEntry& e)
     {
-        if (e.price < min)min = e.price;
-    }
-    return min;
+        return e.orderType == type && e.product == product && e.username == "dataset";
+    });
+    if (matches.empty()) return 100.0;   // fallback if a product has no real data of this type
+    return matches.back().price;         // orders stays chronological, so back() = most recent
 }
 
 std::string OrderBook::getEarliestTime()
@@ -147,14 +181,14 @@ std::vector<OrderBookEntry> OrderBook::matchAsksToBids(std::string product, std:
                 product, 
                 OrderBookType::asksale};
 
-                if (bid.username == "simuser")
+                if (bid.username != "dataset")
                 {
-                    sale.username = "simuser";
+                    sale.username = bid.username;
                     sale.orderType = OrderBookType::bidsale;
                 }
-                if (ask.username == "simuser")
+                if (ask.username != "dataset")
                 {
-                    sale.username = "simuser";
+                    sale.username = ask.username;
                     sale.orderType =  OrderBookType::asksale;
                 }
             
