@@ -9,10 +9,10 @@
 /** Task 3: owns USERS_TRADING.CSV — logs completed trades, shows history & stats.
  *  Row format: username,timestamp,product,orderType,price,amount,status
  *  (orderType "ask"/"bid"; status "filled" or "skipped" for insufficient balance) */
-class TransactionManager
+class Transaction
 {
     public:
-        TransactionManager();
+        Transaction();
 
         /** append one trade for a user: "filled" right after the wallet is updated,
          *  or "skipped" when the wallet could not cover the order */

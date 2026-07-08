@@ -1,4 +1,4 @@
-#include "TransactionManager.h"
+#include "Transaction.h"
 #include "CSVReader.h"
 #include <iostream>
 #include <fstream>
@@ -81,11 +81,11 @@ namespace
     }
 }
 
-TransactionManager::TransactionManager()
+Transaction::Transaction()
 {
 }
 
-double TransactionManager::driftForProduct(const std::string& product)
+double Transaction::driftForProduct(const std::string& product)
 {
     // fixed per-product drift gives each product's simulated years some uniqueness
     static const std::map<std::string, double> drift = {
@@ -99,7 +99,7 @@ double TransactionManager::driftForProduct(const std::string& product)
     return it != drift.end() ? it->second : 0.05;   // fallback for an unlisted product
 }
 
-std::string TransactionManager::tradeLabel(OrderBookType type)
+std::string Transaction::tradeLabel(OrderBookType type)
 {
     // asksale/bidsale -> plain "ask"/"bid" for the CSV and stats;
     // skipped orders arrive as plain ask/bid (they were never settled)
@@ -108,7 +108,7 @@ std::string TransactionManager::tradeLabel(OrderBookType type)
     return "unknown";
 }
 
-void TransactionManager::logTransaction(const std::string& username, const OrderBookEntry& sale,
+void Transaction::logTransaction(const std::string& username, const OrderBookEntry& sale,
                                         const std::string& status)
 {
     std::ofstream file{tradingFile, std::ios::app};
@@ -117,7 +117,7 @@ void TransactionManager::logTransaction(const std::string& username, const Order
          << status << std::endl;
 }
 
-std::vector<TransactionManager::Row> TransactionManager::readAllForUser(const std::string& username)
+std::vector<Transaction::Row> Transaction::readAllForUser(const std::string& username)
 {
     std::vector<Row> rows;
     std::ifstream file{tradingFile};
@@ -137,7 +137,7 @@ std::vector<TransactionManager::Row> TransactionManager::readAllForUser(const st
     return rows;   // missing file -> empty; append-only CSV keeps rows chronological
 }
 
-void TransactionManager::printRecent(const std::string& username, int n)
+void Transaction::printRecent(const std::string& username, int n)
 {
     std::vector<Row> rows = readAllForUser(username);
     if (rows.empty())
@@ -156,7 +156,7 @@ void TransactionManager::printRecent(const std::string& username, int n)
     }
 }
 
-void TransactionManager::printActivityStats(const std::string& username,
+void Transaction::printActivityStats(const std::string& username,
                                             const std::string& startDate,
                                             const std::string& endDate)
 {
@@ -195,7 +195,7 @@ void TransactionManager::printActivityStats(const std::string& username,
     std::cout << "Skipped (insufficient balance): " << totalSkipped << std::endl;
 }
 
-std::pair<int, int> TransactionManager::generateTransactions(const std::string& username,
+std::pair<int, int> Transaction::generateTransactions(const std::string& username,
                                                               OrderBook& orderBook,
                                                               Wallet& wallet,
                                                               int year,
