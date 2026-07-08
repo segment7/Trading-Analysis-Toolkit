@@ -22,18 +22,14 @@ class MerkelMain
 
         // features
         void printOHLC();
-        void enterAsk();
-        void enterBid();
         void printWallet();
         void depositFunds();
         void withdrawFunds();
-        void gotoNextTimeframe();
         /** persist the wallet to USERS_WALLET.CSV*/
         void persistWallet();
         int currentSystemYear();
 
         std::string username;
-        std::string currentTime;
         OrderBook& orderBook;   // shared market data, loaded once in main()
         Wallet wallet;
         TransactionManager transactionManager;

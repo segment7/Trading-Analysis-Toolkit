@@ -16,11 +16,6 @@ class OrderBook
         OrderBook(std::string filename);
     /** return vector of all know products in the dataset*/
         std::vector<std::string> getKnownProducts();
-    /** return vector of Orders according to the sent filters*/
-        std::vector<OrderBookEntry> getOrders(OrderBookType type,
-                                              std::string product,
-                                              std::string timestamp);
-
         /** Task 1: orders of type/product whose date falls in [startDate, endDate] inclusive.
          *  Dates are "YYYY/MM/DD"; empty string = no bound on that side. */
         std::vector<OrderBookEntry> getOrdersInRange(OrderBookType type,
@@ -37,24 +32,14 @@ class OrderBook
                                              const std::string& endDate,
                                              int groupByChars);
 
-        /** returns the earliest time in the orderbook*/
-        std::string getEarliestTime();
-        /** returns the next time after the
-         * sent time in the orderbook
-         * If there is no next timestamp, wraps around to the start
-         * */
-        std::string getNextTime(std::string timestamp);
-
         void insertOrder(OrderBookEntry& order);
-
-        std::vector<OrderBookEntry> matchAsksToBids(std::string product, std::string timestamp);
 
         /** Task 4: last real price for a product/type, ignoring anything simulated —
          *  only entries with the original dataset username count as a seed. */
         double getSeedPrice(OrderBookType type, const std::string& product);
 
     private:
-        /** Filter logic core function, both getOrders variants delegate here */
+        /** Filter logic core function; public range queries and seed lookup delegate here */
         std::vector<OrderBookEntry> filterOrders(const std::function<bool(const OrderBookEntry&)>& pred);
 
         std::vector<OrderBookEntry> orders;
