@@ -3,7 +3,7 @@
 #include <utility>
 #include "OrderBook.h"
 #include "Wallet.h"
-#include "TransactionManager.h"
+#include "Transaction.h"
 
 /** Task 4: fills market-history gaps (init) and runs the user's simulated trades (start).
  *  Construction is inert; both operations are independent and init() is idempotent per year. */
@@ -11,7 +11,7 @@ class Simulation
 {
     public:
         Simulation(std::string username, OrderBook& orderBook, Wallet& wallet,
-                  TransactionManager& transactionManager, int currentYear);
+                  Transaction& transaction, int currentYear);
 
         /** explicit gap-fill from the dataset year through the current year,
          *  one year at a time with progress printed per year;
@@ -28,6 +28,6 @@ class Simulation
         std::string username;
         OrderBook& orderBook;
         Wallet& wallet;
-        TransactionManager& transactionManager;
+        Transaction& transaction;
         int currentYear;
 };

@@ -3,7 +3,7 @@
 #include <string>
 #include "OrderBook.h"
 #include "Wallet.h"
-#include "TransactionManager.h"
+#include "Transaction.h"
 #include "Simulation.h"
 
 /** One logged-in trading session: constructed per login, destroyed on logout */
@@ -32,5 +32,5 @@ class MerkelMain
         std::string username;
         OrderBook& orderBook;   // shared market data, loaded once in main()
         Wallet wallet;
-        TransactionManager transactionManager;
+        Transaction transaction;
 };

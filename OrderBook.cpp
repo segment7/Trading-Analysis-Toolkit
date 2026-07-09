@@ -57,7 +57,7 @@ std::vector<Candlestick> OrderBook::computeOHLC(OrderBookType type,
                                                 int groupByChars)
 {
     std::vector<Candlestick> candles;
-    // chronological order, so first/last seen = open/close; one pass, no per-group rescans
+    // chronological order, so first/last seen = open/close;
     std::vector<OrderBookEntry> filtered = getOrdersInRange(type, product, startDate, endDate);
     for (OrderBookEntry& e : filtered)
     {

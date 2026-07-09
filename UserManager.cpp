@@ -22,7 +22,7 @@ std::vector<std::vector<std::string>> UserManager::readAllUsers()
         std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
         if (tokens.size() == 4) rows.push_back(tokens);
     }
-    return rows;   // missing file -> empty vector, handled gracefully
+    return rows;
 }
 
 void UserManager::writeAllUsers(const std::vector<std::vector<std::string>>& rows)

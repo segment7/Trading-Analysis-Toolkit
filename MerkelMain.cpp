@@ -8,13 +8,13 @@
 #include <ctime>
 
 MerkelMain::MerkelMain(std::string _username, OrderBook& _orderBook)
-// Constructor initialisation (reference member must be initialised here)
+// Constructor initialisation
 : username(_username), orderBook(_orderBook)
 {
     wallet.loadFromFile(username);
     if (wallet.toString().empty())
     {
-        // first ever login (freshly registered or testuser): signup bonus,
+        // first ever login: signup bonus,
         // granted here so every account shares one code path
         wallet.insertCurrency("BTC", 200.0);
         wallet.insertCurrency("ETH", 200.0);
@@ -50,6 +50,11 @@ void MerkelMain::marketMenu()
     while (true)
     {
         std::cout << "\n--- Market ---" << std::endl;
+        std::cout << "\nAvailable products:" << std::endl;
+        for (const std::string& product : orderBook.getKnownProducts())
+        {
+            std::cout << product << std::endl;
+        }
 
         std::cout << "\n1: Print OHLC summary" << std::endl;
         std::cout << "0: Back\n" << std::endl;
@@ -77,7 +82,7 @@ void MerkelMain::walletMenu()
         if (choice == 0) return;
         if (choice == 1) depositFunds();
         if (choice == 2) withdrawFunds();
-        if (choice == 3) transactionManager.printRecent(username, 5);
+        if (choice == 3) transaction.printRecent(username, 5);
         if (choice == 5) simulationMenu();
         if (choice == 4)
         {
@@ -98,7 +103,7 @@ void MerkelMain::walletMenu()
             }
             else
             {
-                transactionManager.printActivityStats(username, startDate, endDate);
+                transaction.printActivityStats(username, startDate, endDate);
             }
         }
     }
@@ -106,7 +111,7 @@ void MerkelMain::walletMenu()
 
 void MerkelMain::simulationMenu()
 {
-    Simulation simulation{username, orderBook, wallet, transactionManager, currentSystemYear()};
+    Simulation simulation{username, orderBook, wallet, transaction, currentSystemYear()};
 
     while (true)
     {
@@ -186,7 +191,7 @@ void MerkelMain::printOHLC()
         if (followUp == 2)
         {
             // gap-fill is market data maintenance, so it lives inside the OHLC view it feeds
-            Simulation simulation{username, orderBook, wallet, transactionManager, currentSystemYear()};
+            Simulation simulation{username, orderBook, wallet, transaction, currentSystemYear()};
             simulation.init();
             // refreshed yearly summary shows the newly filled years
             printTable(OrderBookType::ask, "Asks", "", "", 4);

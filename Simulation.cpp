@@ -11,9 +11,9 @@ namespace
 }
 
 Simulation::Simulation(std::string _username, OrderBook& _orderBook, Wallet& _wallet,
-                       TransactionManager& _transactionManager, int _currentYear)
+                       Transaction& _transaction, int _currentYear)
 : username(_username), orderBook(_orderBook), wallet(_wallet),
-  transactionManager(_transactionManager), currentYear(_currentYear)
+  transaction(_transaction), currentYear(_currentYear)
 {
     // inert on purpose — gap-fill only runs via explicit init()
 }
@@ -67,7 +67,7 @@ int Simulation::init()
         {
             systemWallet.insertCurrency(currency, 1000000000.0);
         }
-        std::pair<int, int> result = transactionManager.generateTransactions(
+        std::pair<int, int> result = transaction.generateTransactions(
             "system", orderBook, systemWallet, year, INIT_ORDERS_PER_SIDE,
             false /* liveTimestamps */, false /* persist */);
 
@@ -95,7 +95,7 @@ std::pair<int, int> Simulation::start()
     int totalFilled = 0, totalSkipped = 0;
     for (int batch = 0; batch < 10 && totalFilled < 50; batch++)
     {
-        std::pair<int, int> result = transactionManager.generateTransactions(
+        std::pair<int, int> result = transaction.generateTransactions(
             username, orderBook, wallet, currentYear, ordersPerSide,
             true /* live : user? : system */,
             true /* persist : user? : system */);
