@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-/** One OHLC candle for a period (a year or a day) — Task 1 */
+/** Task 1: simple value object for one OHLC candle period (a year or a day). */
 class Candlestick
 {
     public:

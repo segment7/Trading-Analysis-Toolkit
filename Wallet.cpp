@@ -131,6 +131,18 @@ void Wallet::processSale(OrderBookEntry& sale)
         currencies[outgoingCurrency] -= outgoingAmount;
     }
 }
+
+bool Wallet::initialiseSignupBonusIfEmpty(const std::string& username)
+{
+    if (!currencies.empty()) return false;
+
+    insertCurrency("BTC", 200.0);
+    insertCurrency("ETH", 200.0);
+    insertCurrency("USDT", 200.0);
+    saveToFile(username);
+    return true;
+}
+
 void Wallet::loadFromFile(const std::string& username)
 {
     currencies.clear();

@@ -27,6 +27,8 @@ class Wallet
         void loadFromFile(const std::string& username);
         /** Task 3: persist current balances back to USERS_WALLET.CSV, preserving other users' rows */
         void saveToFile(const std::string& username) const;
+        /** Task 2.1.6: give a new wallet its first-login bonus and persist it */
+        bool initialiseSignupBonusIfEmpty(const std::string& username);
 
         /** generate a string representation of the wallet */
         std::string toString();

@@ -28,6 +28,12 @@ std::vector<std::string> OrderBook::getKnownProducts()
     return products;
 }
 
+bool OrderBook::hasKnownProduct(const std::string& product)
+{
+    std::vector<std::string> products = getKnownProducts();
+    return std::find(products.begin(), products.end(), product) != products.end();
+}
+
 /** Filter logic core function - one loop, callers supply the condition as a lambda */
 std::vector<OrderBookEntry> OrderBook::filterOrders(const std::function<bool(const OrderBookEntry&)>& pred)
 {

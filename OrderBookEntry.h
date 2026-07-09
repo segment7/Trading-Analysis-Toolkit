@@ -4,6 +4,9 @@
 
 enum class OrderBookType{bid, ask, unknown, asksale, bidsale};
 
+/** Simple value object for one market/order event.
+ *  Fields stay public because the app passes these records between OrderBook,
+ *  Wallet, Simulation, and Transaction without extra behavior. */
 class OrderBookEntry
 {
     public:

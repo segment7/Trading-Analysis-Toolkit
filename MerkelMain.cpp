@@ -3,7 +3,6 @@
 #include <vector>
 #include "Candlestick.h"
 #include "Input.h"
-#include <algorithm>
 #include <iomanip>
 #include <ctime>
 
@@ -12,14 +11,8 @@ MerkelMain::MerkelMain(std::string _username, OrderBook& _orderBook)
 : username(_username), orderBook(_orderBook)
 {
     wallet.loadFromFile(username);
-    if (wallet.toString().empty())
+    if (wallet.initialiseSignupBonusIfEmpty(username))
     {
-        // first ever login: signup bonus,
-        // granted here so every account shares one code path
-        wallet.insertCurrency("BTC", 200.0);
-        wallet.insertCurrency("ETH", 200.0);
-        wallet.insertCurrency("USDT", 200.0);
-        persistWallet();
         std::cout << "First login: signup bonus of 200 BTC, 200 ETH, 200 USDT added to your wallet." << std::endl;
     }
 }
@@ -137,8 +130,7 @@ void MerkelMain::printOHLC()
     std::cout << "Enter product (e.g. ETH/USDT): ";
     std::string product;
     std::getline(std::cin, product);
-    std::vector<std::string> products = orderBook.getKnownProducts();
-    if (std::find(products.begin(), products.end(), product) == products.end())
+    if (!orderBook.hasKnownProduct(product))
     {
         std::cout << "Unknown product: " << product << std::endl;
         return;

@@ -16,6 +16,8 @@ class OrderBook
         OrderBook(std::string filename);
     /** return vector of all know products in the dataset*/
         std::vector<std::string> getKnownProducts();
+        /** does the market data contain this product? */
+        bool hasKnownProduct(const std::string& product);
         /** Task 1: orders of type/product whose date falls in [startDate, endDate] inclusive.
          *  Dates are "YYYY/MM/DD"; empty string = no bound on that side. */
         std::vector<OrderBookEntry> getOrdersInRange(OrderBookType type,

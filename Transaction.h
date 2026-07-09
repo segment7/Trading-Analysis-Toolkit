@@ -1,12 +1,9 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <utility>
 #include "OrderBookEntry.h"
-#include "OrderBook.h"
-#include "Wallet.h"
 
-/** Task 3: owns USERS_TRADING.CSV — logs completed trades, shows history & stats.
+/** Task 3: owns USERS_TRADING.CSV — transaction history, reporting, and stats.
  *  Row format: username,timestamp,product,orderType,price,amount,status
  *  (orderType "ask"/"bid"; status "filled" or "skipped" for insufficient balance) */
 class Transaction
@@ -27,22 +24,6 @@ class Transaction
                                 const std::string& startDate,
                                 const std::string& endDate);
 
-        /** Task 4: generate ordersPerSide asks + bids per product for a year, priced from
-         *  a seed+drift+noise model, settled against the wallet and logged.
-         *  The user's fills cross the spread (sell at mid*0.99, buy at mid*1.01) so
-         *  simulated trading costs money rather than minting it. liveTimestamps=true
-         *  stamps orders with the real current time instead of random moments in the year.
-         *  persist=false is for the system gap-fill: its trades are market data only,
-         *  which will not be written to the user trading log or wallet file.
-         *  Returns {filled, skipped}. */
-        std::pair<int, int> generateTransactions(const std::string& username,
-                                                 OrderBook& orderBook,
-                                                 Wallet& wallet,
-                                                 int year,
-                                                 int ordersPerSide = 5,
-                                                 bool liveTimestamps = false,
-                                                 bool persist = true);
-
     private:
         struct Row
         {
@@ -52,7 +33,6 @@ class Transaction
         };
         std::vector<Row> readAllForUser(const std::string& username);
         static std::string tradeLabel(OrderBookType type);
-        static double driftForProduct(const std::string& product);
 
         const std::string tradingFile = "USERS_TRADING.CSV";
 };

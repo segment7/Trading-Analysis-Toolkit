@@ -1,0 +1,1750 @@
+============================================================
+// FILE: main.cpp
+============================================================
+#include <iostream>
+#include "OrderBook.h"
+#include "UserManager.h"
+#include "MerkelMain.h"
+#include "Input.h"
+
+int main()
+{
+    // load market data ONCE; every login session shares it by reference
+    OrderBook orderBook{"20200601.csv"};
+    UserManager userManager;
+
+    while (true)
+    {
+        std::cout << "\n=========================" << std::endl;
+        std::cout << "=== MerkelRex Trading ===" << std::endl;
+        std::cout << "=========================" << std::endl;
+        std::cout << "\n1: Login / Register" << std::endl;
+        std::cout << "2: Reset password" << std::endl;
+        std::cout << "0: Exit\n" << std::endl;
+        int choice = Input::promptChoice(0, 2);
+
+        if (choice == 0)
+        {
+            std::cout << "Goodbye." << std::endl;
+            break;
+        }
+        if (choice == 1)
+        {
+            std::string username = userManager.loginOrRegister();
+            if (username != "")
+            {
+                // fresh session per login — per-user state, destroyed on logout
+                MerkelMain session{username, orderBook};
+                session.run();
+            }
+        }
+        if (choice == 2) userManager.resetPassword();
+    }
+    return 0;
+}
+
+
+============================================================
+// FILE: MerkelMain.h
+============================================================
+#pragma once
+
+#include <string>
+#include "OrderBook.h"
+#include "Wallet.h"
+#include "Transaction.h"
+#include "Simulation.h"
+
+/** One logged-in trading session: constructed per login, destroyed on logout */
+class MerkelMain
+{
+    public:
+        MerkelMain(std::string _username, OrderBook& _orderBook);
+        /** logged-in menu loop; returns on logout */
+        void run();
+
+    private:
+        // submenus grouped by user intention; each loops until 0 = Back
+        void marketMenu();
+        void walletMenu();
+        void simulationMenu();
+
+        // features
+        void printOHLC();
+        void printWallet();
+        void depositFunds();
+        void withdrawFunds();
+        /** persist the wallet to USERS_WALLET.CSV*/
+        void persistWallet();
+        int currentSystemYear();
+
+        std::string username;
+        OrderBook& orderBook;   // shared market data, loaded once in main()
+        Wallet wallet;
+        Transaction transaction;
+};
+
+
+============================================================
+// FILE: MerkelMain.cpp
+============================================================
+#include "MerkelMain.h"
+#include <iostream>
+#include <vector>
+#include "Candlestick.h"
+#include "Input.h"
+#include <algorithm>
+#include <iomanip>
+#include <ctime>
+
+MerkelMain::MerkelMain(std::string _username, OrderBook& _orderBook)
+// Constructor initialisation
+: username(_username), orderBook(_orderBook)
+{
+    wallet.loadFromFile(username);
+    if (wallet.toString().empty())
+    {
+        // first ever login: signup bonus,
+        // granted here so every account shares one code path
+        wallet.insertCurrency("BTC", 200.0);
+        wallet.insertCurrency("ETH", 200.0);
+        wallet.insertCurrency("USDT", 200.0);
+        persistWallet();
+        std::cout << "First login: signup bonus of 200 BTC, 200 ETH, 200 USDT added to your wallet." << std::endl;
+    }
+}
+
+void MerkelMain::run()
+{
+    while (true)
+    {
+        std::cout << "\n--------------------------------" << std::endl;
+        std::cout << "--- Logged in as " << username << " ---" << std::endl;
+        std::cout << "--------------------------------" << std::endl;
+        std::cout << "\n1: Market" << std::endl;
+        std::cout << "2: Wallet" << std::endl;
+        std::cout << "0: Logout\n" << std::endl;
+        int choice = Input::promptChoice(0, 2);
+        if (choice == 0)
+        {
+            std::cout << "Logged out." << std::endl;
+            return;
+        }
+        if (choice == 1) marketMenu();
+        if (choice == 2) walletMenu();
+    }
+}
+
+void MerkelMain::marketMenu()
+{
+    while (true)
+    {
+        std::cout << "\n--- Market ---" << std::endl;
+        std::cout << "\nAvailable products:" << std::endl;
+        for (const std::string& product : orderBook.getKnownProducts())
+        {
+            std::cout << product << std::endl;
+        }
+
+        std::cout << "\n1: Print OHLC summary" << std::endl;
+        std::cout << "0: Back\n" << std::endl;
+        int choice = Input::promptChoice(0, 1);
+        if (choice == 0) return;
+        if (choice == 1) printOHLC();
+    }
+}
+
+void MerkelMain::walletMenu()
+{
+    while (true)
+    {
+        // balance is shown automatically on entry and after every action,
+        // so no separate "show balance" option is needed
+        std::cout << "\n--- Wallet ---\n" << std::endl;
+        printWallet();
+        std::cout << "1: Deposit" << std::endl;
+        std::cout << "2: Withdraw" << std::endl;
+        std::cout << "3: Recent transactions" << std::endl;
+        std::cout << "4: Activity statistics" << std::endl;
+        std::cout << "5: Simulation" << std::endl;
+        std::cout << "0: Back\n" << std::endl;
+        int choice = Input::promptChoice(0, 5);
+        if (choice == 0) return;
+        if (choice == 1) depositFunds();
+        if (choice == 2) withdrawFunds();
+        if (choice == 3) transaction.printRecent(username, 5);
+        if (choice == 5) simulationMenu();
+        if (choice == 4)
+        {
+            std::cout << "Start date YYYY/MM/DD (blank for all): ";
+            std::string startDate;
+            std::getline(std::cin, startDate);
+            std::cout << "End date YYYY/MM/DD (blank for all): ";
+            std::string endDate;
+            std::getline(std::cin, endDate);
+            if ((!startDate.empty() && startDate.size() != 10) ||
+                (!endDate.empty()   && endDate.size()   != 10))
+            {
+                std::cout << "Dates must be YYYY/MM/DD." << std::endl;
+            }
+            else if (!startDate.empty() && !endDate.empty() && startDate > endDate)
+            {
+                std::cout << "Start date must not be after end date." << std::endl;
+            }
+            else
+            {
+                transaction.printActivityStats(username, startDate, endDate);
+            }
+        }
+    }
+}
+
+void MerkelMain::simulationMenu()
+{
+    Simulation simulation{username, orderBook, wallet, transaction, currentSystemYear()};
+
+    while (true)
+    {
+        std::cout << "\n--- Simulation ---" << std::endl;
+        std::cout << "\n1: Start" << std::endl;
+        std::cout << "0: Back\n" << std::endl;
+        int choice = Input::promptChoice(0, 1);
+        if (choice == 0) return;
+        if (choice == 1)
+        {
+            // wallet is persisted per fill inside generateTransactions
+            std::pair<int, int> result = simulation.start();
+            std::cout << "Simulated " << (result.first + result.second) << " orders: "
+                      << result.first << " filled, "
+                      << result.second << " skipped (insufficient balance)." << std::endl;
+        }
+    }
+}
+
+/** Task 1: OHLC summary table — yearly by default, daily when a date range is given */
+void MerkelMain::printOHLC()
+{
+    std::cout << "Enter product (e.g. ETH/USDT): ";
+    std::string product;
+    std::getline(std::cin, product);
+    std::vector<std::string> products = orderBook.getKnownProducts();
+    if (std::find(products.begin(), products.end(), product) == products.end())
+    {
+        std::cout << "Unknown product: " << product << std::endl;
+        return;
+    }
+     std::cout << "\n--- OHLC Summary ---" << std::endl;
+
+    // show asks and bids together via one reusable lambda
+    auto printTable = [&](OrderBookType type, const std::string& label,
+                          const std::string& startDate, const std::string& endDate,
+                          int groupByChars)
+    {
+        std::vector<Candlestick> candles = orderBook.computeOHLC(type, product,
+                                                                 startDate, endDate,
+                                                                 groupByChars);
+        std::cout << "\n" << label << " on " << product << ":" << std::endl;
+        if (candles.empty())
+        {
+            std::cout << "No data in this range." << std::endl;
+            return;
+        }
+        std::cout << std::fixed << std::setprecision(8);
+        std::cout << std::left  << std::setw(12) << "Date"
+                  << std::right << std::setw(16) << "Open"
+                  << std::setw(16) << "High"
+                  << std::setw(16) << "Low"
+                  << std::setw(16) << "Close" << std::endl;
+        for (Candlestick& c : candles)
+        {
+            std::cout << std::left  << std::setw(12) << c.date
+                      << std::right << std::setw(16) << c.open
+                      << std::setw(16) << c.high
+                      << std::setw(16) << c.low
+                      << std::setw(16) << c.close << std::endl;
+        }
+    };
+
+    // annual summary shows by default
+    printTable(OrderBookType::ask, "Asks", "", "", 4);
+    printTable(OrderBookType::bid, "Bids", "", "", 4);
+
+    // opt-in follow-ups: date filter, or gap-fill init so missing years appear here
+    while (true)
+    {
+        std::cout << "\n1: Filter" << std::endl;
+        std::cout << "2: Generate" << std::endl;
+        std::cout << "0: Back\n" << std::endl;
+        int followUp = Input::promptChoice(0, 2);
+        if (followUp == 0) return;
+
+        if (followUp == 2)
+        {
+            // gap-fill is market data maintenance, so it lives inside the OHLC view it feeds
+            Simulation simulation{username, orderBook, wallet, transaction, currentSystemYear()};
+            simulation.init();
+            // refreshed yearly summary shows the newly filled years
+            printTable(OrderBookType::ask, "Asks", "", "", 4);
+            printTable(OrderBookType::bid, "Bids", "", "", 4);
+            continue;
+        }
+
+        // followUp == 1: date-filtered daily tables
+        std::string startDate, endDate;
+        std::cout << "Start date YYYY/MM/DD (blank for no lower bound): ";
+        std::getline(std::cin, startDate);
+        std::cout << "End date YYYY/MM/DD (blank for no upper bound): ";
+        std::getline(std::cin, endDate);
+        if ((!startDate.empty() && startDate.size() != 10) ||
+            (!endDate.empty()   && endDate.size()   != 10))
+        {
+            std::cout << "Dates must be YYYY/MM/DD." << std::endl;
+            continue;
+        }
+        if (!startDate.empty() && !endDate.empty() && startDate > endDate)
+        {
+            std::cout << "Start date must not be after end date." << std::endl;
+            continue;
+        }
+
+        printTable(OrderBookType::ask, "Asks", startDate, endDate, 10);
+        printTable(OrderBookType::bid, "Bids", startDate, endDate, 10);
+        return;
+    }
+}
+
+void MerkelMain::printWallet()
+{
+    std::cout << wallet.toString() << std::endl;
+}
+
+void MerkelMain::depositFunds()
+{
+    std::cout << "Currency to deposit (e.g. USDT): ";
+    std::string currency;
+    std::getline(std::cin, currency);
+    if (currency.empty())
+    {
+        std::cout << "Currency is required." << std::endl;
+        return;
+    }
+    std::cout << "Amount: ";
+    std::string amountStr;
+    std::getline(std::cin, amountStr);
+    try
+    {
+        double amount = std::stod(amountStr);
+        if (amount <= 0)
+        {
+            std::cout << "Amount must be positive." << std::endl;
+            return;
+        }
+        wallet.insertCurrency(currency, amount);
+        persistWallet();
+        std::cout << "Deposited " << amount << " " << currency << "." << std::endl;
+    }
+    catch (const std::exception& e)
+    {
+        std::cout << "Invalid amount." << std::endl;
+    }
+}
+
+void MerkelMain::withdrawFunds()
+{
+    std::cout << "Currency to withdraw (e.g. USDT): ";
+    std::string currency;
+    std::getline(std::cin, currency);
+    if (currency.empty())
+    {
+        std::cout << "Currency is required." << std::endl;
+        return;
+    }
+    std::cout << "Amount: ";
+    std::string amountStr;
+    std::getline(std::cin, amountStr);
+    try
+    {
+        double amount = std::stod(amountStr);
+        if (amount <= 0)
+        {
+            std::cout << "Amount must be positive." << std::endl;
+            return;
+        }
+        if (wallet.removeCurrency(currency, amount))
+        {
+            persistWallet();
+            std::cout << "Withdrew " << amount << " " << currency << "." << std::endl;
+        }
+        else
+        {
+            std::cout << "Insufficient funds." << std::endl;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cout << "Invalid amount." << std::endl;
+    }
+}
+
+void MerkelMain::persistWallet()
+{
+    wallet.saveToFile(username);
+}
+
+int MerkelMain::currentSystemYear()
+{
+    std::time_t now = std::time(nullptr);
+    return std::localtime(&now)->tm_year + 1900;
+}
+
+
+============================================================
+// FILE: UserManager.h
+============================================================
+#pragma once
+#include <string>
+#include <vector>
+
+/** Task 2: owns USERS_REGISTER.CSV — combined login/register, password reset.
+ *  Row format: username,fullname,email,passwordHash */
+class UserManager
+{
+    public:
+        /** reserved testuser account (blank login skips credentials) */
+        static const std::string TEST_USERNAME;
+
+        UserManager();
+        /** single entry point: blank username -> testuser TEST_USERNAME;
+         *  failed login offers registration; returns username, "" on failure */
+        std::string loginOrRegister();
+        void resetPassword();
+
+    private:
+        /** returns the newly generated username, "" on failure */
+        std::string registerUser();
+
+        std::vector<std::vector<std::string>> readAllUsers();
+        void writeAllUsers(const std::vector<std::vector<std::string>>& rows);
+        std::string generateUsername(const std::vector<std::vector<std::string>>& rows);
+        static std::string hashPassword(const std::string& password);
+
+        const std::string registerFile = "USERS_REGISTER.CSV";
+};
+
+
+============================================================
+// FILE: UserManager.cpp
+============================================================
+#include "UserManager.h"
+#include "CSVReader.h"
+#include "Input.h"
+#include <iostream>
+#include <fstream>
+#include <functional>
+#include <random>
+
+const std::string UserManager::TEST_USERNAME = "0000000000";
+
+UserManager::UserManager()
+{
+}
+
+std::vector<std::vector<std::string>> UserManager::readAllUsers()
+{
+    std::vector<std::vector<std::string>> rows;
+    std::ifstream file{registerFile};
+    std::string line;
+    while (std::getline(file, line))
+    {
+        std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
+        if (tokens.size() == 4) rows.push_back(tokens);
+    }
+    return rows;
+}
+
+void UserManager::writeAllUsers(const std::vector<std::vector<std::string>>& rows)
+{
+    std::ofstream file{registerFile, std::ios::trunc};
+    for (const std::vector<std::string>& r : rows)
+    {
+        file << r[0] << "," << r[1] << "," << r[2] << "," << r[3] << std::endl;
+    }
+}
+
+std::string UserManager::hashPassword(const std::string& password)
+{
+    std::hash<std::string> hasher;
+    return std::to_string(hasher(password));
+}
+
+std::string UserManager::generateUsername(const std::vector<std::vector<std::string>>& rows)
+{
+    static std::mt19937_64 rng{std::random_device{}()};
+    std::uniform_int_distribution<long long> dist{1000000000LL, 9999999999LL};
+    while (true)
+    {
+        std::string candidate = std::to_string(dist(rng));   // always 10 digits
+        bool taken = false;
+        for (const std::vector<std::string>& r : rows)
+        {
+            if (r[0] == candidate) { taken = true; break; }
+        }
+        if (!taken) return candidate;
+    }
+}
+
+std::string UserManager::registerUser()
+{
+    std::string fullname = Input::readLine("Full name: ");
+    std::string email    = Input::readLine("Email address: ");
+    std::string password = Input::readLine("Password: ");
+
+    if (fullname.empty() || email.empty() || password.empty())
+    {
+        std::cout << "All fields are required." << std::endl;
+        return "";
+    }
+    // commas would corrupt the CSV row; '@' check keeps emails plausible
+    if (fullname.find(',') != std::string::npos || email.find(',') != std::string::npos)
+    {
+        std::cout << "Fields must not contain commas." << std::endl;
+        return "";
+    }
+    if (email.find('@') == std::string::npos)
+    {
+        std::cout << "Invalid email address." << std::endl;
+        return "";
+    }
+
+    std::vector<std::vector<std::string>> rows = readAllUsers();
+    for (const std::vector<std::string>& r : rows)
+    {
+        if (r[1] == fullname && r[2] == email)   // Task 2.5: duplicate prevention
+        {
+            std::cout << "User already registered." << std::endl;
+            return "";
+        }
+    }
+
+    std::string username = generateUsername(rows);
+
+    std::ofstream file{registerFile, std::ios::app};
+    file << username << "," << fullname << "," << email << ","
+         << hashPassword(password) << std::endl;
+
+    // Task 2.1.6: signup bonus is granted on first login,
+    // in one shared code path for registered users and the testuser alike
+    std::cout << "Registered! Your username is: " << username << std::endl;
+    std::cout << "(Remember it for next login. Signup bonus on first login: 200 BTC, 200 ETH, 200 USDT)" << std::endl;
+    return username;
+}
+
+std::string UserManager::loginOrRegister()
+{
+    std::string username = Input::readLine("Username (leave blank for testuser): ");
+    if (username.empty())
+    {
+        std::cout << "\nContinuing as testuser " << TEST_USERNAME
+                  << " (login bypassed for quick testing)." << std::endl;
+        return TEST_USERNAME;
+    }
+
+    // unknown usernames skip straight to the registration prompt
+    std::vector<std::vector<std::string>> rows = readAllUsers();
+    const std::vector<std::string>* found = nullptr;
+    for (const std::vector<std::string>& r : rows)
+    {
+        if (r[0] == username) { found = &r; break; }
+    }
+
+    if (found == nullptr)
+    {
+        std::cout << "Username not found." << std::endl;
+        std::string answer = Input::readLine("Register as a new user? (y/n): ");
+        if (answer == "y" || answer == "Y")
+        {
+            return registerUser();   // logs the new user straight in
+        }
+        return "";
+    }
+
+    std::string password = Input::readLine("Password: ");
+    if ((*found)[3] == hashPassword(password))
+    {
+        std::cout << "Welcome, " << (*found)[1] << "!" << std::endl;
+        return username;
+    }
+    std::cout << "Login failed." << std::endl;
+    return "";
+}
+
+void UserManager::resetPassword()
+{
+    // identity check: all three details must match the stored record
+    std::string username = Input::readLine("Username: ");
+    std::string fullname = Input::readLine("Full name: ");
+    std::string email    = Input::readLine("Email address: ");
+
+    std::vector<std::vector<std::string>> rows = readAllUsers();
+    for (std::vector<std::string>& r : rows)
+    {
+        if (r[0] == username && r[1] == fullname && r[2] == email)
+        {
+            std::string newPassword = Input::readLine("New password: ");
+            if (newPassword.empty())
+            {
+                std::cout << "Password must not be empty." << std::endl;
+                return;
+            }
+            r[3] = hashPassword(newPassword);
+            writeAllUsers(rows);
+            std::cout << "Password updated." << std::endl;
+            return;
+        }
+    }
+    std::cout << "Reset failed." << std::endl;
+}
+
+
+============================================================
+// FILE: Wallet.h
+============================================================
+#pragma once
+
+#include <string>
+#include <map>
+#include "OrderBookEntry.h"
+#include <iostream>
+
+class Wallet 
+{
+    public:
+        Wallet();
+        /** insert currency to the wallet */
+        void insertCurrency(std::string type, double amount);
+        /** remove currency from the wallet */
+        bool removeCurrency(std::string type, double amount);
+        
+        /** check if the wallet contains this much currency or more */
+        bool containsCurrency(std::string type, double amount);
+        /** checks if the wallet can cope with this ask or bid.*/
+        bool canFulfillOrder(OrderBookEntry order);
+        /** update the contents of the wallet
+         * assumes the order was made by the owner of the wallet
+        */
+        void processSale(OrderBookEntry& sale);
+
+        /** Task 3: load this user's balances from USERS_WALLET.CSV (missing file/user -> empty wallet) */
+        void loadFromFile(const std::string& username);
+        /** Task 3: persist current balances back to USERS_WALLET.CSV, preserving other users' rows */
+        void saveToFile(const std::string& username) const;
+
+        /** generate a string representation of the wallet */
+        std::string toString();
+        friend std::ostream& operator<<(std::ostream& os, Wallet& wallet);
+
+
+    private:
+        std::map<std::string,double> currencies;
+        const std::string walletFile = "USERS_WALLET.CSV";
+
+};
+
+
+
+	
+
+
+============================================================
+// FILE: Wallet.cpp
+============================================================
+#include "Wallet.h"
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include "CSVReader.h"
+
+Wallet::Wallet()
+{
+
+
+}
+
+void Wallet::insertCurrency(std::string type, double amount)
+{
+    double balance;
+    if (amount < 0)
+    {
+        throw std::exception{};
+    }
+    if (currencies.count(type) == 0) // not there yet
+    {
+        balance = 0;
+    }
+    else { // is there 
+        balance = currencies[type];
+    }
+    balance += amount; 
+    currencies[type] = balance; 
+}
+
+bool Wallet::removeCurrency(std::string type, double amount)
+{
+    if (amount < 0)
+    {
+        return false; 
+    }
+    if (currencies.count(type) == 0) // not there yet
+    {
+        //std::cout << "No currency for " << type << std::endl;
+        return false;
+    }
+    else { // is there - do  we have enough
+        if (containsCurrency(type, amount))// we have enough
+        {
+            //std::cout << "Removing " << type << ": " << amount << std::endl;
+            currencies[type] -= amount;
+            return true;
+        } 
+        else // they have it but not enough.
+            return false; 
+    }
+}
+
+bool Wallet::containsCurrency(std::string type, double amount)
+{
+    if (currencies.count(type) == 0) // not there yet
+        return false;
+    else 
+        return currencies[type] >= amount;
+    
+}
+
+std::string Wallet::toString()
+{
+    std::string s;
+    for (std::pair<std::string,double> pair : currencies)
+    {
+        std::string currency = pair.first;
+        double amount = pair.second;
+        s += currency + " : " + std::to_string(amount) + "\n";
+    }
+    return s;
+}
+
+bool Wallet::canFulfillOrder(OrderBookEntry order)
+{
+    std::vector<std::string> currs = CSVReader::tokenise(order.product, '/');
+    // defence in depth: a product that isn't BASE/QUOTE would make currs[1]
+    // an out-of-bounds read below — treat it as unaffordable instead
+    if (currs.size() != 2) return false;
+    bool ok = false;
+    double amount = order.amount;        
+    std::string currency = currs[0];
+    bool isAsk = order.orderType == OrderBookType::ask || order.orderType == OrderBookType::asksale;
+    // ask/asksale: selling the base currency
+    if (isAsk)
+    {
+        ok = containsCurrency(currs[0], order.amount);
+    }
+    // bid/bidsale: paying with the quote currency
+    else
+    {
+        ok = containsCurrency(currs[1], order.amount * order.price);
+    }
+
+    std::string typeLabel = isAsk ? "ask" : "bid";
+    std::cout << "canFulfillOrder [" << typeLabel << "] "
+              << currency 
+              << " : " 
+              << amount
+              << (ok ? "    filled" : "    skipped") << std::endl;
+    return ok;
+}
+      
+
+void Wallet::processSale(OrderBookEntry& sale)
+{
+    std::vector<std::string> currs = CSVReader::tokenise(sale.product, '/');
+    if (currs.size() != 2) return;   // malformed product: leave balances untouched
+    // ask
+    if (sale.orderType == OrderBookType::asksale)
+    {
+        double outgoingAmount = sale.amount;
+        std::string outgoingCurrency = currs[0];
+        double incomingAmount = sale.amount * sale.price;
+        std::string incomingCurrency = currs[1];
+
+        currencies[incomingCurrency] += incomingAmount;
+        currencies[outgoingCurrency] -= outgoingAmount;
+
+    }
+    // bid
+    if (sale.orderType == OrderBookType::bidsale)
+    {
+        double incomingAmount = sale.amount;
+        std::string incomingCurrency = currs[0];
+        double outgoingAmount = sale.amount * sale.price;
+        std::string outgoingCurrency = currs[1];
+
+        currencies[incomingCurrency] += incomingAmount;
+        currencies[outgoingCurrency] -= outgoingAmount;
+    }
+}
+void Wallet::loadFromFile(const std::string& username)
+{
+    currencies.clear();
+    std::ifstream file{walletFile};
+    std::string line;
+    while (std::getline(file, line))
+    {
+        std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
+        if (tokens.size() != 3 || tokens[0] != username) continue;
+        try
+        {
+            currencies[tokens[1]] = std::stod(tokens[2]);
+        }
+        catch (const std::exception& e) { }   // skip malformed rows
+    }
+}
+
+void Wallet::saveToFile(const std::string& username) const
+{
+    // the file holds every user's balances — keep everyone else's rows untouched,
+    // then replace this user's rows with the current in-memory map
+    std::vector<std::string> otherLines;
+    std::ifstream in{walletFile};
+    std::string line;
+    while (std::getline(in, line))
+    {
+        std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
+        if (tokens.size() == 3 && tokens[0] != username)
+        {
+            otherLines.push_back(line);
+        }
+    }
+
+    std::ofstream out{walletFile, std::ios::trunc};
+    for (const std::string& l : otherLines) out << l << std::endl;
+    for (std::pair<const std::string, double> const& c : currencies)
+    {
+        out << username << "," << c.first << "," << c.second << std::endl;
+    }
+}
+
+std::ostream& operator<<(std::ostream& os,  Wallet& wallet)
+{
+    os << wallet.toString();
+    return os;
+}
+
+
+============================================================
+// FILE: OrderBook.h
+============================================================
+#pragma once
+#include "OrderBookEntry.h"
+#include "CSVReader.h"
+#include "Candlestick.h"
+#include <string>
+#include <vector>
+#include <functional>
+
+class OrderBook
+{
+    public:
+        /** Given dataset only contains year 2020; Task 4 anchors drift/backfill to this */
+        static constexpr int DATASET_YEAR = 2020;
+
+    /** construct, reading a csv data file */
+        OrderBook(std::string filename);
+    /** return vector of all know products in the dataset*/
+        std::vector<std::string> getKnownProducts();
+        /** Task 1: orders of type/product whose date falls in [startDate, endDate] inclusive.
+         *  Dates are "YYYY/MM/DD"; empty string = no bound on that side. */
+        std::vector<OrderBookEntry> getOrdersInRange(OrderBookType type,
+                                                     const std::string& product,
+                                                     const std::string& startDate,
+                                                     const std::string& endDate);
+
+        /** Task 1: OHLC candles for a product+type, grouped by timestamp prefix length:
+         *  groupByChars 4 = yearly ("2020"), 10 = daily ("2020/06/01").
+         *  Single pass over the filtered orders — no per-group re-scans. */
+        std::vector<Candlestick> computeOHLC(OrderBookType type,
+                                             const std::string& product,
+                                             const std::string& startDate,
+                                             const std::string& endDate,
+                                             int groupByChars);
+
+        void insertOrder(OrderBookEntry& order);
+
+        /** Task 4: last real price for a product/type, ignoring anything simulated —
+         *  only entries with the original dataset username count as a seed. */
+        double getSeedPrice(OrderBookType type, const std::string& product);
+
+    private:
+        /** Filter logic core function; public range queries and seed lookup delegate here */
+        std::vector<OrderBookEntry> filterOrders(const std::function<bool(const OrderBookEntry&)>& pred);
+
+        std::vector<OrderBookEntry> orders;
+};
+
+
+============================================================
+// FILE: OrderBook.cpp
+============================================================
+#include "OrderBook.h"
+#include "CSVReader.h"
+#include <map>
+#include <algorithm>
+
+/** construct, reading a csv data file */
+OrderBook::OrderBook(std::string filename)
+{
+    orders = CSVReader::readCSV(filename);
+}
+
+/** return vector of all known products in the dataset */
+std::vector<std::string> OrderBook::getKnownProducts()
+{
+    std::vector<std::string> products;
+    std::map<std::string, bool> prodMap;
+
+    for (OrderBookEntry& e : orders)
+    {
+        prodMap[e.product] = true;
+    }
+
+    for (auto const& e : prodMap)
+    {
+        products.push_back(e.first);
+    }
+
+    return products;
+}
+
+/** Filter logic core function - one loop, callers supply the condition as a lambda */
+std::vector<OrderBookEntry> OrderBook::filterOrders(const std::function<bool(const OrderBookEntry&)>& pred)
+{
+    std::vector<OrderBookEntry> orders_sub;
+    std::copy_if(orders.begin(), orders.end(), std::back_inserter(orders_sub), pred);
+    return orders_sub;
+}
+
+std::vector<OrderBookEntry> OrderBook::getOrdersInRange(OrderBookType type,
+                                                        const std::string& product,
+                                                        const std::string& startDate,
+                                                        const std::string& endDate)
+{
+    return filterOrders([&](const OrderBookEntry& e)
+    {
+        if (e.orderType != type || e.product != product) return false;
+        // compare date prefix only, so endDate stays inclusive; empty bounds need no special case
+        std::string datePart = e.timestamp.substr(0, 10);
+        return datePart >= startDate && (endDate.empty() || datePart <= endDate);
+    });
+}
+
+std::vector<Candlestick> OrderBook::computeOHLC(OrderBookType type,
+                                                const std::string& product,
+                                                const std::string& startDate,
+                                                const std::string& endDate,
+                                                int groupByChars)
+{
+    std::vector<Candlestick> candles;
+    // chronological order, so first/last seen = open/close;
+    std::vector<OrderBookEntry> filtered = getOrdersInRange(type, product, startDate, endDate);
+    for (OrderBookEntry& e : filtered)
+    {
+        std::string key = e.timestamp.substr(0, groupByChars);
+        if (candles.empty() || candles.back().date != key)
+        {
+            // first entry of a new period: open = high = low = close = this price
+            candles.push_back(Candlestick{key, e.price, e.price, e.price, e.price});
+        }
+        else
+        {
+            Candlestick& c = candles.back();
+            if (e.price > c.high) c.high = e.price;
+            if (e.price < c.low)  c.low  = e.price;
+            c.close = e.price;   // last one wins = close
+        }
+    }
+    return candles;
+}
+
+double OrderBook::getSeedPrice(OrderBookType type, const std::string& product)
+{
+    std::vector<OrderBookEntry> matches = filterOrders([&](const OrderBookEntry& e)
+    {
+        return e.orderType == type && e.product == product && e.username == "dataset";
+    });
+    if (matches.empty()) return 100.0;   // fallback if a product has no real data of this type
+    return matches.back().price;         // orders stays chronological, so back() = most recent
+}
+
+void OrderBook::insertOrder(OrderBookEntry& order)
+{
+    orders.push_back(order);
+    std::sort(orders.begin(), orders.end(), OrderBookEntry::compareByTimestamp);
+}
+
+
+============================================================
+// FILE: OrderBookEntry.h
+============================================================
+#pragma once
+
+#include <string>
+
+enum class OrderBookType{bid, ask, unknown, asksale, bidsale};
+
+class OrderBookEntry
+{
+    public:
+    
+
+        OrderBookEntry( double _price, 
+                        double _amount, 
+                        std::string _timestamp, 
+                        std::string _product, 
+                        OrderBookType _orderType, 
+                        std::string username = "dataset");
+
+        static OrderBookType stringToOrderBookType(std::string s);
+
+        static bool compareByTimestamp(OrderBookEntry& e1, OrderBookEntry& e2)
+        {
+            return e1.timestamp < e2.timestamp;
+        }  
+
+        double price;
+        double amount;
+        std::string timestamp;
+        std::string product;
+        OrderBookType orderType;
+        std::string username;
+};
+
+
+============================================================
+// FILE: OrderBookEntry.cpp
+============================================================
+#include "OrderBookEntry.h"
+
+OrderBookEntry::OrderBookEntry( double _price, 
+                        double _amount, 
+                        std::string _timestamp, 
+                        std::string _product, 
+                        OrderBookType _orderType, 
+                        std::string _username)
+// Constructor initialisation
+: price(_price), 
+  amount(_amount), 
+  timestamp(_timestamp),
+  product(_product), 
+  orderType(_orderType), 
+  username(_username)
+{
+  
+    
+}
+
+OrderBookType OrderBookEntry::stringToOrderBookType(std::string s)
+{
+  if (s == "ask")
+  {
+    return OrderBookType::ask;
+  }
+  if (s == "bid")
+  {
+    return OrderBookType::bid;
+  }
+  return OrderBookType::unknown;
+}
+
+
+============================================================
+// FILE: Candlestick.h
+============================================================
+#pragma once
+#include <string>
+
+/** One OHLC candle for a period (a year or a day) — Task 1 */
+class Candlestick
+{
+    public:
+        Candlestick(std::string _date,
+                    double _open, double _high,
+                    double _low,  double _close);
+
+        std::string date;   // period label, e.g. "2020" or "2020/06/01"
+        double open;        // first price in the period (by time)
+        double high;        // highest price in the period
+        double low;         // lowest price in the period
+        double close;       // last price in the period (by time)
+};
+
+
+============================================================
+// FILE: Candlestick.cpp
+============================================================
+#include "Candlestick.h"
+
+// Constructor initialisation
+Candlestick::Candlestick(std::string _date,
+                         double _open, double _high,
+                         double _low,  double _close)
+: date(_date), 
+  open(_open), 
+  high(_high), 
+  low(_low), 
+  close(_close)
+{
+    
+}
+
+
+============================================================
+// FILE: Transaction.h
+============================================================
+#pragma once
+#include <string>
+#include <vector>
+#include <utility>
+#include "OrderBookEntry.h"
+#include "OrderBook.h"
+#include "Wallet.h"
+
+/** Task 3: owns USERS_TRADING.CSV — logs completed trades, shows history & stats.
+ *  Row format: username,timestamp,product,orderType,price,amount,status
+ *  (orderType "ask"/"bid"; status "filled" or "skipped" for insufficient balance) */
+class Transaction
+{
+    public:
+        Transaction();
+
+        /** append one trade for a user: "filled" right after the wallet is updated,
+         *  or "skipped" when the wallet could not cover the order */
+        void logTransaction(const std::string& username, const OrderBookEntry& sale,
+                            const std::string& status = "filled");
+
+        /** print the last n transactions for this user (any product), most recent first */
+        void printRecent(const std::string& username, int n = 5);
+
+        /** print ask/bid counts (all products + per product) and total spent in [startDate,endDate] */
+        void printActivityStats(const std::string& username,
+                                const std::string& startDate,
+                                const std::string& endDate);
+
+        /** Task 4: generate ordersPerSide asks + bids per product for a year, priced from
+         *  a seed+drift+noise model, settled against the wallet and logged.
+         *  The user's fills cross the spread (sell at mid*0.99, buy at mid*1.01) so
+         *  simulated trading costs money rather than minting it. liveTimestamps=true
+         *  stamps orders with the real current time instead of random moments in the year.
+         *  persist=false is for the system gap-fill: its trades are market data only,
+         *  which will not be written to the user trading log or wallet file.
+         *  Returns {filled, skipped}. */
+        std::pair<int, int> generateTransactions(const std::string& username,
+                                                 OrderBook& orderBook,
+                                                 Wallet& wallet,
+                                                 int year,
+                                                 int ordersPerSide = 5,
+                                                 bool liveTimestamps = false,
+                                                 bool persist = true);
+
+    private:
+        struct Row
+        {
+            std::string username, timestamp, product, orderType;
+            double price, amount;
+            std::string status;
+        };
+        std::vector<Row> readAllForUser(const std::string& username);
+        static std::string tradeLabel(OrderBookType type);
+        static double driftForProduct(const std::string& product);
+
+        const std::string tradingFile = "USERS_TRADING.CSV";
+};
+
+
+============================================================
+// FILE: Transaction.cpp
+============================================================
+#include "Transaction.h"
+#include "CSVReader.h"
+#include <iostream>
+#include <fstream>
+#include <map>
+#include <algorithm>
+#include <cmath>
+#include <random>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
+
+namespace
+{
+    // Task 4 price model: seed * (1+drift)^(year-2020) * (1+noise), ±1% ask/bid spread
+    double randomNoise()
+    {
+        static std::mt19937 rng{std::random_device{}()};
+        static std::uniform_real_distribution<double> dist{-0.05, 0.05};
+        return dist(rng);
+    }
+
+    double randomAmount()
+    {
+        static std::mt19937 rng{std::random_device{}()};
+        static std::uniform_real_distribution<double> dist{0.1, 3.0};
+        return dist(rng);
+    }
+
+    // random moment spread across the year; current year is capped at "now".
+    // insertOrder re-sorts by timestamp, so generation order doesn't matter.
+    std::string makeTimestamp(int year, int offsetSeconds)
+    {
+        std::time_t now = std::time(nullptr);
+        int currentYear = std::localtime(&now)->tm_year + 1900;
+
+        std::tm startTm = {};
+        startTm.tm_year = year - 1900;
+        startTm.tm_mon = 0;
+        startTm.tm_mday = 1;
+        std::time_t yearStart = std::mktime(&startTm);
+
+        std::time_t yearEnd;
+        if (year == currentYear)
+        {
+            yearEnd = now;
+        }
+        else
+        {
+            std::tm endTm = {};
+            endTm.tm_year = year - 1900;
+            endTm.tm_mon = 11;
+            endTm.tm_mday = 31;
+            endTm.tm_hour = 23;
+            endTm.tm_min = 59;
+            endTm.tm_sec = 59;
+            yearEnd = std::mktime(&endTm);
+        }
+        if (yearEnd <= yearStart) yearEnd = yearStart + 1;   // guard a same-second edge case
+
+        static std::mt19937 rng{std::random_device{}()};
+        std::uniform_int_distribution<long long> dist{static_cast<long long>(yearStart),
+                                                       static_cast<long long>(yearEnd)};
+        std::time_t chosen = static_cast<std::time_t>(dist(rng)) + offsetSeconds;
+        if (chosen > yearEnd) chosen = yearEnd;   // keep the current-year cap intact
+
+        std::tm chosenTm = *std::localtime(&chosen);
+        std::ostringstream oss;
+        oss << std::put_time(&chosenTm, "%Y/%m/%d %H:%M:%S") << ".000000";
+        return oss.str();
+    }
+
+    // the real wall-clock moment, for live simulation runs
+    std::string nowTimestamp()
+    {
+        std::time_t now = std::time(nullptr);
+        std::tm nowTm = *std::localtime(&now);
+        std::ostringstream oss;
+        oss << std::put_time(&nowTm, "%Y/%m/%d %H:%M:%S") << ".000000";
+        return oss.str();
+    }
+}
+
+Transaction::Transaction()
+{
+}
+
+double Transaction::driftForProduct(const std::string& product)
+{
+    // fixed per-product drift gives each product's simulated years some uniqueness
+    static const std::map<std::string, double> drift = {
+        {"BTC/USDT",  0.08},
+        {"ETH/USDT",  0.10},
+        {"DOGE/USDT", 0.05},
+        {"ETH/BTC",   0.02},
+        {"DOGE/BTC", -0.03},
+    };
+    auto it = drift.find(product);
+    return it != drift.end() ? it->second : 0.05;   // fallback for an unlisted product
+}
+
+std::string Transaction::tradeLabel(OrderBookType type)
+{
+    // asksale/bidsale -> plain "ask"/"bid" for the CSV and stats;
+    // skipped orders arrive as plain ask/bid (they were never settled)
+    if (type == OrderBookType::asksale || type == OrderBookType::ask) return "ask";
+    if (type == OrderBookType::bidsale || type == OrderBookType::bid) return "bid";
+    return "unknown";
+}
+
+void Transaction::logTransaction(const std::string& username, const OrderBookEntry& sale,
+                                        const std::string& status)
+{
+    std::ofstream file{tradingFile, std::ios::app};
+    file << username << "," << sale.timestamp << "," << sale.product << ","
+         << tradeLabel(sale.orderType) << "," << sale.price << "," << sale.amount << ","
+         << status << std::endl;
+}
+
+std::vector<Transaction::Row> Transaction::readAllForUser(const std::string& username)
+{
+    std::vector<Row> rows;
+    std::ifstream file{tradingFile};
+    std::string line;
+    while (std::getline(file, line))
+    {
+        std::vector<std::string> tokens = CSVReader::tokenise(line, ',');
+        if ((tokens.size() != 6 && tokens.size() != 7) || tokens[0] != username) continue;
+        try
+        {
+            rows.push_back(Row{tokens[0], tokens[1], tokens[2], tokens[3],
+                               std::stod(tokens[4]), std::stod(tokens[5]),
+                               tokens.size() == 7 ? tokens[6] : "filled"});
+        }
+        catch (const std::exception& e) { }   // skip malformed rows
+    }
+    return rows;   // missing file -> empty; append-only CSV keeps rows chronological
+}
+
+void Transaction::printRecent(const std::string& username, int n)
+{
+    std::vector<Row> rows = readAllForUser(username);
+    if (rows.empty())
+    {
+        std::cout << "\nNo transactions yet.\n" << std::endl;
+        return;
+    }
+    int start = std::max(0, static_cast<int>(rows.size()) - n);
+    std::cout << "Last " << (rows.size() - start) << " transaction(s):" << std::endl;
+    for (int i = static_cast<int>(rows.size()) - 1; i >= start; --i)
+    {
+        Row& r = rows[i];
+        std::cout << r.timestamp << "  " << r.product << "  " << r.orderType
+                  << "  price=" << r.price << "  amount=" << r.amount
+                  << "  " << r.status << std::endl;
+    }
+}
+
+void Transaction::printActivityStats(const std::string& username,
+                                            const std::string& startDate,
+                                            const std::string& endDate)
+{
+    std::vector<Row> rows = readAllForUser(username);
+    if (rows.empty())
+    {
+        std::cout << "\nNo transactions yet.\n" << std::endl;
+        return;
+    }
+
+    int totalAsks = 0, totalBids = 0, totalSkipped = 0;
+    double totalSpent = 0;
+    std::map<std::string, std::pair<int, int>> perProduct;   // product -> (asks, bids)
+
+    for (Row& r : rows)
+    {
+        if (r.status == "skipped") { totalSkipped++; continue; }   // never settled — excluded from totals
+        if (r.orderType == "ask") { totalAsks++; perProduct[r.product].first++;  }
+        if (r.orderType == "bid") { totalBids++; perProduct[r.product].second++; }
+
+        // same date-range convention as OrderBook::getOrdersInRange
+        std::string datePart = r.timestamp.substr(0, 10);
+        if (datePart >= startDate && (endDate.empty() || datePart <= endDate))
+        {
+            totalSpent += r.price * r.amount;
+        }
+    }
+
+    std::cout << "Total asks: " << totalAsks << ", total bids: " << totalBids << std::endl;
+    for (auto const& kv : perProduct)
+    {
+        std::cout << "  " << kv.first << ": " << kv.second.first << " asks, "
+                  << kv.second.second << " bids" << std::endl;
+    }
+    std::cout << "Total spent in range: " << totalSpent << std::endl;
+    std::cout << "Skipped (insufficient balance): " << totalSkipped << std::endl;
+}
+
+std::pair<int, int> Transaction::generateTransactions(const std::string& username,
+                                                              OrderBook& orderBook,
+                                                              Wallet& wallet,
+                                                              int year,
+                                                              int ordersPerSide,
+                                                              bool liveTimestamps,
+                                                              bool persist)
+{
+    int filled = 0, skipped = 0;
+    int offsetSeconds = 0;   // spaces out timestamps so insertOrder's sort keeps them in order
+
+    for (const std::string& product : orderBook.getKnownProducts())
+    {
+        double seed = orderBook.getSeedPrice(OrderBookType::ask, product);
+        double yearFactor = std::pow(1.0 + driftForProduct(product), year - OrderBook::DATASET_YEAR);
+
+        for (int i = 0; i < ordersPerSide; i++)   // asks
+        {
+            std::string timestamp = liveTimestamps ? nowTimestamp()
+                                                   : makeTimestamp(year, offsetSeconds++);
+            double mid = seed * yearFactor * (1.0 + randomNoise());
+            double askPrice = mid * 1.01;    // resting book ask (market data for OHLC)
+            double sellPrice = mid * 0.99;   // the user's sell crosses the spread: it hits the best bid
+            double amount = randomAmount();
+
+            // resting order defaults to "dataset" — visible to OHLC, never re-settled
+            OrderBookEntry restingAsk{askPrice, amount, timestamp, product, OrderBookType::ask};
+            // this user's actual fill, settled against their wallet now
+            OrderBookEntry fillAsk{sellPrice, amount, timestamp, product, OrderBookType::asksale, username};
+
+            if (wallet.canFulfillOrder(fillAsk))
+            {
+                orderBook.insertOrder(restingAsk);
+                wallet.processSale(fillAsk);
+                if (persist)
+                {
+                    logTransaction(username, fillAsk);
+                    wallet.saveToFile(username);   // balance persisted after every transaction
+                }
+                filled++;
+            }
+            else
+            {
+                // insufficient balance — Task 4.2.iii; recorded so the history shows it
+                if (persist) logTransaction(username, fillAsk, "skipped");
+                skipped++;
+            }
+        }
+
+        for (int i = 0; i < ordersPerSide; i++)   // bids
+        {
+            std::string timestamp = liveTimestamps ? nowTimestamp()
+                                                   : makeTimestamp(year, offsetSeconds++);
+            double mid = seed * yearFactor * (1.0 + randomNoise());
+            double bidPrice = mid * 0.99;   // resting book bid (market data for OHLC)
+            double buyPrice = mid * 1.01;   // the user's buy crosses the spread: it lifts the best ask
+            double amount = randomAmount();
+
+            OrderBookEntry restingBid{bidPrice, amount, timestamp, product, OrderBookType::bid};
+            OrderBookEntry fillBid{buyPrice, amount, timestamp, product, OrderBookType::bidsale, username};
+
+            if (wallet.canFulfillOrder(fillBid))
+            {
+                orderBook.insertOrder(restingBid);
+                wallet.processSale(fillBid);
+                if (persist)
+                {
+                    logTransaction(username, fillBid);
+                    wallet.saveToFile(username);
+                }
+                filled++;
+            }
+            else
+            {
+                if (persist) logTransaction(username, fillBid, "skipped");
+                skipped++;
+            }
+        }
+    }
+
+    return {filled, skipped};
+}
+
+
+============================================================
+// FILE: Simulation.h
+============================================================
+#pragma once
+#include <string>
+#include <utility>
+#include "OrderBook.h"
+#include "Wallet.h"
+#include "Transaction.h"
+
+/** Task 4: fills market-history gaps (init) and runs the user's simulated trades (start).
+ *  Construction is inert; both operations are independent and init() is idempotent per year. */
+class Simulation
+{
+    public:
+        Simulation(std::string username, OrderBook& orderBook, Wallet& wallet,
+                  Transaction& transaction, int currentYear);
+
+        /** explicit gap-fill from the dataset year through the current year,
+         *  one year at a time with progress printed per year;
+         *  returns how many years were newly filled */
+        int init();
+
+        /** run at least 50 transactions stamped with the real current time */
+        std::pair<int, int> start();
+
+    private:
+        /** does this year already have data? (keeps init() idempotent) */
+        bool yearHasData(int year);
+
+        std::string username;
+        OrderBook& orderBook;
+        Wallet& wallet;
+        Transaction& transaction;
+        int currentYear;
+};
+
+
+============================================================
+// FILE: Simulation.cpp
+============================================================
+#include "Simulation.h"
+#include "CSVReader.h"
+#include <iostream>
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+    // a few orders per product/side/year — enough to seed one OHLC candle
+    constexpr int INIT_ORDERS_PER_SIDE = 2;
+}
+
+Simulation::Simulation(std::string _username, OrderBook& _orderBook, Wallet& _wallet,
+                       Transaction& _transaction, int _currentYear)
+: username(_username), orderBook(_orderBook), wallet(_wallet),
+  transaction(_transaction), currentYear(_currentYear)
+{
+    // inert on purpose — gap-fill only runs via explicit init()
+}
+
+bool Simulation::yearHasData(int year)
+{
+    std::vector<std::string> products = orderBook.getKnownProducts();
+    if (products.empty()) return true;   // nothing to check against
+
+    std::string yearStart = std::to_string(year) + "/01/01";
+    std::string yearEnd   = std::to_string(year) + "/12/31";
+    return !orderBook.getOrdersInRange(OrderBookType::ask, products.front(),
+                                       yearStart, yearEnd).empty();
+}
+
+int Simulation::init()
+{
+    // backfill each year from the dataset year through the current year
+    // (the current year's timestamps are capped at "now" by the generator)
+    std::vector<std::string> products = orderBook.getKnownProducts();
+    if (products.empty()) return 0;
+
+    // derive currencies once, outside the year loop
+    std::vector<std::string> currencies;
+    for (const std::string& product : products)
+    {
+        for (const std::string& currency : CSVReader::tokenise(product, '/'))
+        {
+            if (std::find(currencies.begin(), currencies.end(), currency) == currencies.end())
+            {
+                currencies.push_back(currency);
+            }
+        }
+    }
+
+    int yearsFilled = 0;
+    for (int year = OrderBook::DATASET_YEAR + 1; year <= currentYear; year++)
+    {
+        if (yearHasData(year))
+        {
+            std::cout << "Year " << year << ": already initialised." << std::endl;
+            continue;
+        }
+
+        std::cout << "Year " << year << ": generating market data..." << std::endl;
+
+        // throwaway, generously-funded system wallet — its trades are market data,
+        // (persist=false)
+        Wallet systemWallet;
+        for (const std::string& currency : currencies)
+        {
+            systemWallet.insertCurrency(currency, 1000000000.0);
+        }
+        std::pair<int, int> result = transaction.generateTransactions(
+            "system", orderBook, systemWallet, year, INIT_ORDERS_PER_SIDE,
+            false /* liveTimestamps */, false /* persist */);
+
+        std::cout << "Year " << year << ": done (" << result.first << " filled, "
+                  << result.second << " skipped)." << std::endl;
+        yearsFilled++;
+    }
+
+    if (yearsFilled == 0)
+    {
+        std::cout << "Market history already up to date." << std::endl;
+    }
+    return yearsFilled;
+}
+
+std::pair<int, int> Simulation::start()
+{
+    // scale ordersPerSide up if there are fewer than 5 products
+    int productCount = static_cast<int>(orderBook.getKnownProducts().size());
+    int ordersPerSide = productCount > 0
+        ? static_cast<int>(std::ceil(50.0 / (productCount * 2)))
+        : 5;
+
+    // fulfill any more orders until reach 50
+    int totalFilled = 0, totalSkipped = 0;
+    for (int batch = 0; batch < 10 && totalFilled < 50; batch++)
+    {
+        std::pair<int, int> result = transaction.generateTransactions(
+            username, orderBook, wallet, currentYear, ordersPerSide,
+            true /* live : user? : system */,
+            true /* persist : user? : system */);
+        totalFilled += result.first;
+        totalSkipped += result.second;
+    }
+    return {totalFilled, totalSkipped};
+}
+
+
+============================================================
+// FILE: CSVReader.h
+============================================================
+#pragma once
+
+#include "OrderBookEntry.h"
+#include <vector>
+#include <string>
+
+
+class CSVReader
+{
+    public:
+     CSVReader();
+
+     static std::vector<OrderBookEntry> readCSV(std::string csvFile);
+     static std::vector<std::string> tokenise(std::string csvLine, char separator);
+    
+    private:
+     static OrderBookEntry stringsToOBE(std::vector<std::string> strings);
+     
+};
+
+
+============================================================
+// FILE: CSVReader.cpp
+============================================================
+#include "CSVReader.h"
+#include <iostream>
+#include <fstream>
+
+
+CSVReader::CSVReader()
+{
+
+}
+
+std::vector<OrderBookEntry> CSVReader::readCSV(std::string csvFilename)
+{
+    std::vector<OrderBookEntry> entries;
+
+    std::ifstream csvFile{csvFilename};
+    std::string line;
+    if (csvFile.is_open())
+    {
+        while(std::getline(csvFile, line))
+        {
+            try {
+                OrderBookEntry obe = stringsToOBE(tokenise(line, ','));
+                entries.push_back(obe);
+            }catch(const std::exception& e)
+            {
+                std::cout << "CSVReader::readCSV bad data"  << std::endl;
+            }
+        }// end of while
+    }    
+
+    std::cout << "CSVReader::readCSV read " << entries.size() << " entries"  << std::endl;
+    return entries; 
+}
+
+std::vector<std::string> CSVReader::tokenise(std::string csvLine, char separator)
+{
+   std::vector<std::string> tokens;
+   signed int start, end;
+   std::string token;
+    start = csvLine.find_first_not_of(separator, 0);
+    do{
+        end = csvLine.find_first_of(separator, start);
+        if (start == static_cast<int>(csvLine.length()) || start == end) break;
+        if (end >= 0) token = csvLine.substr(start, end - start);
+        else token = csvLine.substr(start, csvLine.length() - start);
+        tokens.push_back(token);
+    start = end + 1;
+    }while(end > 0);
+
+   return tokens; 
+}
+
+OrderBookEntry CSVReader::stringsToOBE(std::vector<std::string> tokens)
+{
+    double price, amount;
+
+    if (tokens.size() != 5) // bad
+    {
+        std::cout << "Bad line " << std::endl;
+        throw std::exception{};
+    }
+    // we have 5 tokens
+    try {
+         price = std::stod(tokens[3]);
+         amount = std::stod(tokens[4]);
+    }catch(const std::exception& e){
+        std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[3]<< std::endl;
+        std::cout << "CSVReader::stringsToOBE Bad float! " << tokens[4]<< std::endl; 
+        throw;        
+    }
+
+    OrderBookEntry obe{price, 
+                        amount, 
+                        tokens[0],
+                        tokens[1], 
+                        OrderBookEntry::stringToOrderBookType(tokens[2])};
+
+    return obe; 
+}
+
+
+============================================================
+// FILE: Input.h
+============================================================
+#pragma once
+#include <iostream>
+#include <string>
+
+/** Shared input helpers — the one place all menu/user input is read and validated (Task 5) */
+namespace Input
+{
+    /** print prompt, read a whole line; returns "" on EOF */
+    inline std::string readLine(const std::string& prompt)
+    {
+        std::cout << prompt;
+        std::string line;
+        if (!std::getline(std::cin, line)) return "";   // EOF
+        return line;
+    }
+
+    /** menu choice in [min,max]; re-prompts until valid; EOF returns 0 = exit/back */
+    inline int promptChoice(int min, int max)
+    {
+        while (true)
+        {
+            std::cout << "Type in " << min << "-" << max << ": ";
+            std::string line;
+            if (!std::getline(std::cin, line)) return 0;  // EOF exits cleanly
+            try
+            {
+                int choice = std::stoi(line);
+                if (choice >= min && choice <= max) return choice;
+            }
+            catch (const std::exception& e) { }
+            std::cout << "Invalid choice." << std::endl;
+        }
+    }
+}
+
+
