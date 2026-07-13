@@ -12,10 +12,12 @@ class OrderBook
         /** Given dataset only contains year 2020; Task 4 anchors drift/backfill to this */
         static constexpr int DATASET_YEAR = 2020;
 
+// END MY CODE
     /** construct, reading a csv data file */
         OrderBook(std::string filename);
     /** return vector of all know products in the dataset*/
         std::vector<std::string> getKnownProducts();
+// START MY CODE
         /** does the market data contain this product? */
         bool hasKnownProduct(const std::string& product);
         /** Task 1: orders of type/product whose date falls in [startDate, endDate] inclusive.
@@ -33,9 +35,11 @@ class OrderBook
                                              const std::string& startDate,
                                              const std::string& endDate,
                                              int groupByChars);
+// END MY CODE
 
         void insertOrder(OrderBookEntry& order);
 
+// START MY CODE
         /** Task 4: last real price for a product/type, ignoring anything simulated —
          *  only entries with the original dataset username count as a seed. */
         double getSeedPrice(OrderBookType type, const std::string& product);
@@ -45,4 +49,5 @@ class OrderBook
         std::vector<OrderBookEntry> filterOrders(const std::function<bool(const OrderBookEntry&)>& pred);
 
         std::vector<OrderBookEntry> orders;
+// END MY CODE
 };

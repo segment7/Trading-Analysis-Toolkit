@@ -40,7 +40,9 @@ std::vector<std::string> CSVReader::tokenise(std::string csvLine, char separator
     start = csvLine.find_first_not_of(separator, 0);
     do{
         end = csvLine.find_first_of(separator, start);
+// START MY CODE
         if (start == static_cast<int>(csvLine.length()) || start == end) break;
+// END MY CODE
         if (end >= 0) token = csvLine.substr(start, end - start);
         else token = csvLine.substr(start, csvLine.length() - start);
         tokens.push_back(token);

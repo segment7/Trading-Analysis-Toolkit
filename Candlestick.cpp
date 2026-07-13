@@ -1,3 +1,4 @@
+// START MY CODE
 #include "Candlestick.h"
 
 // Constructor initialisation
@@ -12,3 +13,4 @@ Candlestick::Candlestick(std::string _date,
 {
     
 }
+// END MY CODE

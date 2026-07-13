@@ -1,3 +1,4 @@
+// START MY CODE
 #pragma once
 #include <string>
 #include <vector>
@@ -27,3 +28,4 @@ class UserManager
 
         const std::string registerFile = "USERS_REGISTER.CSV";
 };
+// END MY CODE

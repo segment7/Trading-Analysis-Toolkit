@@ -1,3 +1,4 @@
+// START MY CODE
 #pragma once
 #include <iostream>
 #include <string>
@@ -32,3 +33,4 @@ namespace Input
         }
     }
 }
+// END MY CODE

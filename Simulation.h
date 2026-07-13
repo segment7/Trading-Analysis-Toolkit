@@ -1,3 +1,4 @@
+// START MY CODE
 #pragma once
 #include <string>
 #include <utility>
@@ -44,3 +45,4 @@ class Simulation
         Transaction& transaction;
         int currentYear;
 };
+// END MY CODE

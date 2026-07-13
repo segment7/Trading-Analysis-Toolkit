@@ -1,3 +1,4 @@
+// START MY CODE
 #pragma once
 #include <string>
 
@@ -15,3 +16,4 @@ class Candlestick
         double low;         // lowest price in the period
         double close;       // last price in the period (by time)
 };
+// END MY CODE

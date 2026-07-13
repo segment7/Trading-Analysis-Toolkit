@@ -75,6 +75,7 @@ std::string Wallet::toString()
 bool Wallet::canFulfillOrder(OrderBookEntry order)
 {
     std::vector<std::string> currs = CSVReader::tokenise(order.product, '/');
+// START MY CODE
     // defence in depth: a product that isn't BASE/QUOTE would make currs[1]
     // an out-of-bounds read below — treat it as unaffordable instead
     if (currs.size() != 2) return false;
@@ -100,13 +101,16 @@ bool Wallet::canFulfillOrder(OrderBookEntry order)
               << amount
               << (ok ? "    filled" : "    skipped") << std::endl;
     return ok;
+// END MY CODE
 }
       
 
 void Wallet::processSale(OrderBookEntry& sale)
 {
     std::vector<std::string> currs = CSVReader::tokenise(sale.product, '/');
+// START MY CODE
     if (currs.size() != 2) return;   // malformed product: leave balances untouched
+// END MY CODE
     // ask
     if (sale.orderType == OrderBookType::asksale)
     {
@@ -131,6 +135,7 @@ void Wallet::processSale(OrderBookEntry& sale)
         currencies[outgoingCurrency] -= outgoingAmount;
     }
 }
+// START MY CODE
 
 bool Wallet::initialiseSignupBonusIfEmpty(const std::string& username)
 {
@@ -184,6 +189,7 @@ void Wallet::saveToFile(const std::string& username) const
     }
 }
 
+// END MY CODE
 std::ostream& operator<<(std::ostream& os,  Wallet& wallet)
 {
     os << wallet.toString();

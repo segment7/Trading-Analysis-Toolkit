@@ -1,6 +1,7 @@
 #include "MerkelMain.h"
 #include <iostream>
 #include <vector>
+// START MY CODE
 #include "Candlestick.h"
 #include "Input.h"
 #include <iomanip>
@@ -297,4 +298,5 @@ int MerkelMain::currentSystemYear()
 {
     std::time_t now = std::time(nullptr);
     return std::localtime(&now)->tm_year + 1900;
+// END MY CODE
 }

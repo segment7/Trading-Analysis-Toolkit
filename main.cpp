@@ -5,6 +5,7 @@
 #include "Input.h"
 
 int main()
+// START MY CODE
 {
     // load market data ONCE; every login session shares it by reference
     OrderBook orderBook{"20200601.csv"};
@@ -38,4 +39,5 @@ int main()
         if (choice == 2) userManager.resetPassword();
     }
     return 0;
+// END MY CODE
 }

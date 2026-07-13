@@ -14,6 +14,7 @@ class MerkelMain
         /** logged-in menu loop; returns on logout */
         void run();
 
+// START MY CODE
     private:
         // submenus grouped by user intention; each loops until 0 = Back
         void marketMenu();
@@ -33,4 +34,5 @@ class MerkelMain
         OrderBook& orderBook;   // shared market data, loaded once in main()
         Wallet wallet;
         Transaction transaction;
+// END MY CODE
 };

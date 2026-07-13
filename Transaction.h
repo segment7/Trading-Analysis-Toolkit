@@ -1,3 +1,4 @@
+// START MY CODE
 #pragma once
 #include <string>
 #include <vector>
@@ -36,3 +37,4 @@ class Transaction
 
         const std::string tradingFile = "USERS_TRADING.CSV";
 };
+// END MY CODE

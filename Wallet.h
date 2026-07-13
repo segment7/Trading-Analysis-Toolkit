@@ -23,12 +23,14 @@ class Wallet
         */
         void processSale(OrderBookEntry& sale);
 
+// START MY CODE
         /** Task 3: load this user's balances from USERS_WALLET.CSV (missing file/user -> empty wallet) */
         void loadFromFile(const std::string& username);
         /** Task 3: persist current balances back to USERS_WALLET.CSV, preserving other users' rows */
         void saveToFile(const std::string& username) const;
         /** Task 2.1.6: give a new wallet its first-login bonus and persist it */
         bool initialiseSignupBonusIfEmpty(const std::string& username);
+// END MY CODE
 
         /** generate a string representation of the wallet */
         std::string toString();
@@ -37,7 +39,9 @@ class Wallet
 
     private:
         std::map<std::string,double> currencies;
+// START MY CODE
         const std::string walletFile = "USERS_WALLET.CSV";
+// END MY CODE
 
 };
 

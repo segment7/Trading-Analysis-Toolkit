@@ -13,7 +13,9 @@ OrderBook::OrderBook(std::string filename)
 std::vector<std::string> OrderBook::getKnownProducts()
 {
     std::vector<std::string> products;
+// START MY CODE
     std::map<std::string, bool> prodMap;
+// END MY CODE
 
     for (OrderBookEntry& e : orders)
     {
@@ -28,6 +30,7 @@ std::vector<std::string> OrderBook::getKnownProducts()
     return products;
 }
 
+// START MY CODE
 bool OrderBook::hasKnownProduct(const std::string& product)
 {
     std::vector<std::string> products = getKnownProducts();
@@ -92,6 +95,7 @@ double OrderBook::getSeedPrice(OrderBookType type, const std::string& product)
     });
     if (matches.empty()) return 100.0;   // fallback if a product has no real data of this type
     return matches.back().price;         // orders stays chronological, so back() = most recent
+// END MY CODE
 }
 
 void OrderBook::insertOrder(OrderBookEntry& order)

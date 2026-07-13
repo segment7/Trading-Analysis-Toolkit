@@ -1,3 +1,4 @@
+// START MY CODE
 #include "UserManager.h"
 #include "CSVReader.h"
 #include "Input.h"
@@ -167,3 +168,4 @@ void UserManager::resetPassword()
     }
     std::cout << "Reset failed." << std::endl;
 }
+// END MY CODE
